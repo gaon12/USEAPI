@@ -1,17 +1,39 @@
 # USEAPI
-파파고 API를 이용해 모르는 단어를 검색하는 프로그램입니다
 
-웹검색도 지원합니다
+WinForms 기반 텍스트 뷰어, 웹 검색, Papago 번역 도구입니다.
 
-# 프로그램 동작사진
-![image](https://github.com/hihotz/USEAPI/assets/74196405/9e5e5988-8600-4e83-be70-6397fc096d95)
+## 주요 기능
 
+- 텍스트 파일을 열어 내용을 확인합니다.
+- 선택한 텍스트를 Papago 번역 입력창으로 보냅니다.
+- 선택한 텍스트를 네이버 검색으로 바로 검색합니다.
+- 기본 홈 URL을 설정 창에서 저장합니다.
 
-# 주요기능
-* 상단의 환경설정에서는 웹의 기본 페이지를 설정 할 수 있습니다
-  
-* 좌측화면 : 상단의 텍스트 전용에서는 직접 텍스트를 타이핑할 수 있으며, 파일 열기에서는 읽기전용으로 파일을 불러올 수 있습니다
-            원하는 단어를 드래그 후 우클릭 하는경우 우측화면의 파파고번역에 선택된 단어가 자동으로 넘어갑니다
-            원하는 단어를 드래그 후 휠버튼 클릭하는경우 즉시 웹 검색이 됩니다
-  
-* 우측화면 : 파파고번역기를 이용한 번역기능과 웹 검색 기능을 제공합니다
+## 설정 저장
+
+홈 URL은 실행 파일 위치가 아니라 사용자별 앱 데이터 폴더에 저장됩니다.
+
+```text
+%LOCALAPPDATA%\USEAPI\settings.json
+```
+
+기존 저장소의 `USEAPI\textFile\URL.txt`는 첫 실행 마이그레이션용으로만 읽습니다. 새로 저장한 값은 위 설정 파일에 기록됩니다. 설정을 읽거나 쓰다 실패하면 `%LOCALAPPDATA%\USEAPI\error.log`에 원인이 기록되고, 기본 홈은 `https://www.naver.com/`을 사용합니다.
+
+## Papago API 키
+
+API 키는 소스 코드에 넣지 않습니다. 실행 전에 환경 변수로 설정하세요.
+
+```powershell
+$env:NAVER_CLIENT_ID = "발급받은 Client ID"
+$env:NAVER_CLIENT_SECRET = "발급받은 Client Secret"
+```
+
+영구 설정이 필요하면 Windows 사용자 환경 변수에 같은 이름으로 등록하면 됩니다.
+
+## 빌드
+
+Visual Studio 또는 MSBuild로 `USEAPI.sln`을 빌드합니다.
+
+```powershell
+MSBuild .\USEAPI.sln /p:Configuration=Debug /p:Platform="Any CPU"
+```

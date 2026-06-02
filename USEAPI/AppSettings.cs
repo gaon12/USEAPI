@@ -1,136 +1,108 @@
-using System;
-using System.IO;
-using System.Text;
-using System.Web.Script.Serialization;
+using System.Text.Json;
 
-namespace USEAPI
+namespace USEAPI;
+
+public sealed class AppSettings
 {
-    public sealed class AppSettings
+    public const string DefaultHomeUrl = "https://www.naver.com/";
+
+    public string HomeUrl { get; set; } = DefaultHomeUrl;
+}
+
+public sealed class AppSettingsStore
+{
+    private const string LegacyUrlPath = @"textFile\URL.txt";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        public const string DefaultHomeUrl = "https://www.naver.com/";
+        WriteIndented = true
+    };
 
-        public AppSettings()
-        {
-            HomeUrl = DefaultHomeUrl;
-        }
+    private readonly string settingsPath;
+    private readonly string legacyBasePath;
 
-        public string HomeUrl { get; set; }
+    public AppSettingsStore()
+        : this(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "USEAPI", "settings.json"),
+            AppContext.BaseDirectory)
+    {
     }
 
-    public sealed class AppSettingsStore
+    public AppSettingsStore(string settingsPath, string legacyBasePath)
     {
-        private const string LegacyUrlPath = @"textFile\URL.txt";
+        this.settingsPath = settingsPath ?? throw new ArgumentNullException(nameof(settingsPath));
+        this.legacyBasePath = legacyBasePath ?? throw new ArgumentNullException(nameof(legacyBasePath));
+    }
 
-        private readonly string settingsPath;
-        private readonly string legacyBasePath;
-        private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
-
-        public AppSettingsStore()
-            : this(
-                  Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "USEAPI", "settings.json"),
-                  AppDomain.CurrentDomain.BaseDirectory)
+    public AppSettings Load()
+    {
+        try
         {
+            if (File.Exists(settingsPath))
+            {
+                var json = File.ReadAllText(settingsPath);
+                var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+                settings.HomeUrl = NormalizeHomeUrl(settings.HomeUrl);
+                return settings;
+            }
+
+            var migratedSettings = new AppSettings
+            {
+                HomeUrl = NormalizeHomeUrl(ReadLegacyHomeUrl())
+            };
+            Save(migratedSettings);
+            return migratedSettings;
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex);
+            return new AppSettings();
+        }
+    }
+
+    public bool Save(AppSettings settings, out string message)
+    {
+        try
+        {
+            Save(settings);
+            message = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ErrorLog.Write(ex);
+            message = ex.Message;
+            return false;
+        }
+    }
+
+    private void Save(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        settings.HomeUrl = NormalizeHomeUrl(settings.HomeUrl);
+        var directory = Path.GetDirectoryName(settingsPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
         }
 
-        public AppSettingsStore(string settingsPath, string legacyBasePath)
-        {
-            if (settingsPath == null)
-            {
-                throw new ArgumentNullException("settingsPath");
-            }
+        File.WriteAllText(settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+    }
 
-            if (legacyBasePath == null)
-            {
-                throw new ArgumentNullException("legacyBasePath");
-            }
+    private string? ReadLegacyHomeUrl()
+    {
+        var legacyPath = Path.Combine(legacyBasePath, LegacyUrlPath);
+        return File.Exists(legacyPath)
+            ? File.ReadLines(legacyPath).FirstOrDefault()
+            : AppSettings.DefaultHomeUrl;
+    }
 
-            this.settingsPath = settingsPath;
-            this.legacyBasePath = legacyBasePath;
-        }
-
-        public AppSettings Load()
-        {
-            try
-            {
-                if (File.Exists(settingsPath))
-                {
-                    var json = File.ReadAllText(settingsPath, Encoding.UTF8);
-                    var settings = serializer.Deserialize<AppSettings>(json);
-                    if (settings == null)
-                    {
-                        settings = new AppSettings();
-                    }
-                    settings.HomeUrl = NormalizeHomeUrl(settings.HomeUrl);
-                    return settings;
-                }
-
-                var migratedUrl = ReadLegacyHomeUrl();
-                var migratedSettings = new AppSettings { HomeUrl = NormalizeHomeUrl(migratedUrl) };
-                Save(migratedSettings);
-                return migratedSettings;
-            }
-            catch (Exception ex)
-            {
-                ErrorLog.Write(ex);
-                return new AppSettings();
-            }
-        }
-
-        public bool Save(AppSettings settings, out string message)
-        {
-            try
-            {
-                Save(settings);
-                message = string.Empty;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                ErrorLog.Write(ex);
-                message = ex.Message;
-                return false;
-            }
-        }
-
-        private void Save(AppSettings settings)
-        {
-            if (settings == null)
-            {
-                throw new ArgumentNullException("settings");
-            }
-
-            settings.HomeUrl = NormalizeHomeUrl(settings.HomeUrl);
-            var directory = Path.GetDirectoryName(settingsPath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(settingsPath, serializer.Serialize(settings), Encoding.UTF8);
-        }
-
-        private string ReadLegacyHomeUrl()
-        {
-            var legacyPath = Path.Combine(legacyBasePath, LegacyUrlPath);
-            if (!File.Exists(legacyPath))
-            {
-                return AppSettings.DefaultHomeUrl;
-            }
-
-            string[] lines = File.ReadAllLines(legacyPath, Encoding.UTF8);
-            return lines.Length > 0 ? lines[0] : null;
-        }
-
-        private static string NormalizeHomeUrl(string url)
-        {
-            Uri uri;
-            if (Uri.TryCreate(url, UriKind.Absolute, out uri) &&
-                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-            {
-                return uri.AbsoluteUri;
-            }
-
-            return AppSettings.DefaultHomeUrl;
-        }
+    private static string NormalizeHomeUrl(string? url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                ? uri.AbsoluteUri
+                : AppSettings.DefaultHomeUrl;
     }
 }

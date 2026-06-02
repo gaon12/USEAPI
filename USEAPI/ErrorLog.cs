@@ -20,7 +20,12 @@ namespace USEAPI
 
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(LogPath));
+                var directory = Path.GetDirectoryName(LogPath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
                 File.AppendAllText(
                     LogPath,
                     string.Format("[{0:yyyy-MM-dd HH:mm:ss zzz}] {1}\r\n\r\n", DateTimeOffset.Now, exception),

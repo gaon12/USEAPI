@@ -12,8 +12,8 @@ namespace USEAPI
 {
     public partial class Setting : Form
     {
-        public event EventHandler Changed = null;
-        public event EventHandler CloseSetting = null;
+        public event EventHandler? Changed;
+        public event EventHandler? CloseSetting;
         private readonly AppSettingsStore settingsStore = new AppSettingsStore();
         private bool closeNotified;
 
@@ -62,7 +62,7 @@ namespace USEAPI
 
         }
 
-        private void Setting_FormClosed(object sender, FormClosedEventArgs e)
+        private void Setting_FormClosed(object? sender, FormClosedEventArgs e)
         {
             NotifyClosed();
         }

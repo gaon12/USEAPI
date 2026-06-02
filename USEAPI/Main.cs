@@ -13,7 +13,7 @@ namespace USEAPI
 {
     public partial class Main : Form
     {
-        private Setting setting = null;
+        private Setting? setting;
         private readonly AppSettingsStore settingsStore = new AppSettingsStore();
         private readonly PapagoClient papagoClient = new PapagoClient();
         public Main()
@@ -21,7 +21,7 @@ namespace USEAPI
             InitializeComponent();
         }
 
-        public static string HomeURL;       //기본 홈 설정, Setting.cs에서 이용
+        public static string HomeURL = AppSettings.DefaultHomeUrl;       //기본 홈 설정, Setting.cs에서 이용
         private TranslationDirection translationDirection = TranslationDirection.KoreanToEnglish;
 
         #region Form1 로드시 기본 세팅
@@ -190,8 +190,8 @@ namespace USEAPI
             {
                 setting = new Setting();
                 setting.Owner = this;
-                setting.Changed += new EventHandler(SettingApply);  // 컨트롤 등의 변경
-                setting.CloseSetting += new EventHandler(SettingClose); // 닫음
+                setting.Changed += SettingApply;  // 컨트롤 등의 변경
+                setting.CloseSetting += SettingClose; // 닫음
                 setting.Show();
             }
             else
@@ -200,16 +200,21 @@ namespace USEAPI
             }
         }
 
-        public void SettingApply(object sender, EventArgs e)
+        public void SettingApply(object? sender, EventArgs e)
         {
+            if (setting == null)
+            {
+                return;
+            }
+
             HomeURL = setting.SetURL;     // pathSetting Form에서  Rootpath 정보를 가져와서 ~
             Web_URL.Text = HomeURL;
         }
 
-        public void SettingClose(object sender, EventArgs e)
+        public void SettingClose(object? sender, EventArgs e)
         {
             //모달리스 종료 처리
-            setting.Dispose();
+            setting?.Dispose();
             setting = null;
         }
 
@@ -236,7 +241,7 @@ namespace USEAPI
                     return;
                 }
 
-                Uri uri;
+                Uri? uri;
                 if (File.Exists(address))
                 {
                     uri = new Uri(Path.GetFullPath(address));

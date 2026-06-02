@@ -21,19 +21,21 @@ WinForms 기반 텍스트 뷰어, 웹 검색, Papago 번역 도구입니다.
 
 ## Papago API 키
 
-API 키는 소스 코드에 넣지 않습니다. 실행 전에 환경 변수로 설정하세요.
+Papago 번역은 NAVER Developers Open API가 아니라 NAVER Cloud Platform Papago Translation API를 사용합니다.
+
+API 키는 소스 코드에 넣지 않습니다. 실행 전에 네이버 클라우드 콘솔에서 발급받은 값을 환경 변수로 설정하세요.
 
 ```powershell
-$env:NAVER_CLIENT_ID = "발급받은 Client ID"
-$env:NAVER_CLIENT_SECRET = "발급받은 Client Secret"
+$env:NCP_PAPAGO_API_KEY_ID = "네이버 클라우드 Client ID"
+$env:NCP_PAPAGO_API_KEY = "네이버 클라우드 Client Secret"
 ```
 
 영구 설정이 필요하면 Windows 사용자 환경 변수에 같은 이름으로 등록하면 됩니다.
 
 ## 빌드
 
-Visual Studio 또는 MSBuild로 `USEAPI.sln`을 빌드합니다.
+.NET 10 SDK로 `USEAPI.sln`을 빌드합니다.
 
 ```powershell
-MSBuild .\USEAPI.sln /p:Configuration=Debug /p:Platform="Any CPU"
+& "C:\Program Files\dotnet\dotnet.exe" build .\USEAPI.sln -c Debug
 ```

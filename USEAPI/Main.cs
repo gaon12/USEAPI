@@ -5,7 +5,6 @@ using System.Data;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -15,30 +14,23 @@ namespace USEAPI
     public partial class Main : Form
     {
         private Setting setting = null;
+        private readonly AppSettingsStore settingsStore = new AppSettingsStore();
+        private readonly PapagoClient papagoClient = new PapagoClient();
         public Main()
         {
             InitializeComponent();
         }
 
         public static string HomeURL;       //기본 홈 설정, Setting.cs에서 이용
-        private static int flag = 1;        //플래그 .
+        private TranslationDirection translationDirection = TranslationDirection.KoreanToEnglish;
 
         #region Form1 로드시 기본 세팅
         private void Form1_Load(object sender, EventArgs e)
         {
-            try
-            {
-                string[] saveurl = File.ReadAllLines(@"..\..\textFile\URL.txt");
-                HomeURL = saveurl[0];
-            }
-            catch
-            {
-                //웹브라우저 기본홈 설정안되있을경우 구글 기본로딩
-                HomeURL = "https://www.google.co.kr/";
-            }
+            HomeURL = settingsStore.Load().HomeUrl;
             
             Web_URL.Text = HomeURL;
-            Web_Search.Navigate(Web_URL.Text);
+            NavigateWebBrowser(Web_Search, Web_URL.Text);
             this.Invalidate();
 
             //before 기본텍스트 입력
@@ -49,39 +41,34 @@ namespace USEAPI
         #region 파일열기 탭
         private void FindText_Click(object sender, EventArgs e)
         {
+            openFileDialog2.Filter = "텍스트파일(*.txt)|*.txt|C파일(*.c)|*.c|C++파일(*.cpp)|*.cpp|C#파일(*.cs)|*.cs";
+            if (openFileDialog2.ShowDialog() != DialogResult.OK)
+            {
+                return;
+            }
+
+            FindText_URL.Text = openFileDialog2.FileName;
             try
             {
-                String file_path = null;
-                OpenFileDialog openFileDialog2 = new OpenFileDialog();
-                openFileDialog2.Filter = "텍스트파일(*.txt)|*.txt|C파일(*.c)|*.c|C++파일(*.cpp)|*.cpp|C#파일(*.cs)|*.cs";
-                if (openFileDialog2.ShowDialog() == DialogResult.OK)
-                {
-                    file_path = openFileDialog2.FileName;       //선택된 파일의 풀 경로를 불러와 저장
-                    FindText_URL.Text = file_path;
-                }
-                string textValue = File.ReadAllText(FindText_URL.Text); // 파일  읽어 오기
-                richTextBox1.Text = textValue;
+                richTextBox1.Text = File.ReadAllText(openFileDialog2.FileName, Encoding.UTF8);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                richTextBox1.Text = " 읽을 수 없는 파일입니다.";
+                ErrorLog.Write(ex);
+                richTextBox1.Text = string.Format("읽을 수 없는 파일입니다.\r\n{0}", ex.Message);
             }
         }
         private void FindFile_Click(object sender, EventArgs e)
         {
             FindFile_URL.Clear();
 
-            String file_path = null;
-            //openFileDialog1.InitialDirectory = FullPath;
-            if (openFileDialog1.ShowDialog() == DialogResult.OK)
+            if (openFileDialog1.ShowDialog() != DialogResult.OK)
             {
-                file_path = openFileDialog1.FileName;       //선택된 파일의 풀 경로를 불러와 저장
-                //FindFile_URL.Text = "file:\\\\\\" + file_path;
-                FindFile_URL.Text = file_path;
+                return;
             }
 
-            string url = FindFile_URL.Text;
-            web.Navigate(url);
+            FindFile_URL.Text = openFileDialog1.FileName;
+            NavigateWebBrowser(web, openFileDialog1.FileName);
         }
         #endregion
         
@@ -97,11 +84,7 @@ namespace USEAPI
             //마우스 휠클릭(한글 클릭시 오류)
             if (e.Button == MouseButtons.Middle)
             {
-                //멀티바이트
-                Web_URL.Text = "https://search.naver.com/search.naver?ie=MBCS&query=" + richTextBox1.SelectedText;
-                //UTF-8
-                //Web_URL.Text = "https://search.naver.com/search.naver?ie=UTF-8&query=" + richTextBox1.SelectedText;
-                Web_URL_Btn_Click(sender, e);
+                SearchSelectedText(richTextBox1.SelectedText);
             }
         }
         #endregion
@@ -109,11 +92,17 @@ namespace USEAPI
         #region 웹검색 버튼
         private void GoBack_Click(object sender, EventArgs e)
         {
-            Web_Search.GoBack();
+            if (Web_Search.CanGoBack)
+            {
+                Web_Search.GoBack();
+            }
         }
         private void GoForward_Click(object sender, EventArgs e)
         {
-            Web_Search.GoForward();
+            if (Web_Search.CanGoForward)
+            {
+                Web_Search.GoForward();
+            }
         }
         private void GoHome_Click(object sender, EventArgs e)
         {
@@ -122,7 +111,7 @@ namespace USEAPI
         }
         private void Web_URL_Btn_Click(object sender, EventArgs e)
         {
-            Web_Search.Navigate(Web_URL.Text);
+            NavigateWebBrowser(Web_Search, Web_URL.Text);
         }
         private void Web_URL_KeyDown(object sender, KeyEventArgs e)
         {
@@ -133,7 +122,10 @@ namespace USEAPI
         }
         private void Web_Search_Navigated(object sender, WebBrowserNavigatedEventArgs e)
         {
-            Web_URL.Text = Web_Search.Url.AbsoluteUri.ToString();
+            if (Web_Search.Url != null)
+            {
+                Web_URL.Text = Web_Search.Url.AbsoluteUri;
+            }
         }
         #endregion
 
@@ -143,20 +135,20 @@ namespace USEAPI
             before.Clear();
         }
 
-        private void Translate_Btn_Click(object sender, EventArgs e)
+        private async void Translate_Btn_Click(object sender, EventArgs e)
         {
-            Papago_Api();
+            await Papago_Api();
         }
         private void Change_Btn_Click(object sender, EventArgs e)
         {
-            if (flag == 1)
+            if (translationDirection == TranslationDirection.KoreanToEnglish)
             {
-                flag = 2;
+                translationDirection = TranslationDirection.EnglishToKorean;
                 Change_Btn.Text = "영어 -> 한글";
             }
-            else if (flag == 2)
+            else
             {
-                flag = 1;
+                translationDirection = TranslationDirection.KoreanToEnglish;
                 Change_Btn.Text = "한글 -> 영어";
             }
         }
@@ -172,75 +164,22 @@ namespace USEAPI
 
         #region 파파고 번역
         //파파고
-        private void Papago_Api()
+        private async Task Papago_Api()
         {
             try
             {
-                string url = "https://openapi.naver.com/v1/papago/n2mt";
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                request.Headers.Add("X-Naver-Client-Id", "");             //개인키코드, papago에서 api 발급받아 입력
-                request.Headers.Add("X-Naver-Client-Secret", "");         //개인키코드, papago에서 api 발급받아 입력
-                request.Method = "POST";
-                if (flag == 1)
-                {
-                    //before textbox의 텍스트를 전달
-                    string query = before.Text;
-                    byte[] byteDataParams = Encoding.UTF8.GetBytes("source=ko&target=en&text=" + query);
-                    request.ContentType = "application/x-www-form-urlencoded";
-                    request.ContentLength = byteDataParams.Length;
-                    Stream st = request.GetRequestStream();
-                    st.Write(byteDataParams, 0, byteDataParams.Length);
-                    st.Close();
-                    HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-                    Stream stream = response.GetResponseStream();
-                    StreamReader reader = new StreamReader(stream, Encoding.UTF8);
-                    string text = reader.ReadToEnd();
-                    stream.Close();
-                    response.Close();
-                    reader.Close();
-                    //after textbox에 처리된 데이터 출력
-                    text = CutText(text);
-                    after.Text = text;
-                }
-                else if (flag == 2)
-                {
-                    //before textbox의 텍스트를 전달
-                    string query = before.Text;
-                    byte[] byteDataParams = Encoding.UTF8.GetBytes("source=en&target=ko&text=" + query);
-                    request.ContentType = "application/x-www-form-urlencoded";
-                    request.ContentLength = byteDataParams.Length;
-                    Stream st = request.GetRequestStream();
-                    st.Write(byteDataParams, 0, byteDataParams.Length);
-                    st.Close();
-                    HttpWebResponse response = (HttpWebResponse)request.GetResponse();
-                    Stream stream = response.GetResponseStream();
-                    StreamReader reader = new StreamReader(stream, Encoding.UTF8);
-                    string text = reader.ReadToEnd();
-                    stream.Close();
-                    response.Close();
-                    reader.Close();
-                    //after textbox에 처리된 데이터 출력
-                    text = CutText(text);
-                    after.Text = text;
-                }
+                Translate_Btn.Enabled = false;
+                after.Text = await papagoClient.TranslateAsync(before.Text, translationDirection);
             }
-            catch(Exception)
+            catch(Exception ex)
             {
-                MessageBox.Show("에러");
+                ErrorLog.Write(ex);
+                MessageBox.Show(ex.Message, "번역 오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-        }
-
-        //불필요 정보 삭제
-        private string CutText(string text)
-        {
-            //앞부분 삭제
-            int f1 = text.LastIndexOf("translatedText\":\"");
-            string f2 = text.Substring(f1 + 17);
-            //뒤부분 삭제
-            int b1 = f2.LastIndexOf("\",\"engineType");
-            string b2 = f2.Remove(b1);           
-
-            return b2;
+            finally
+            {
+                Translate_Btn.Enabled = true;
+            }
         }
         #endregion
         
@@ -264,6 +203,7 @@ namespace USEAPI
         public void SettingApply(object sender, EventArgs e)
         {
             HomeURL = setting.SetURL;     // pathSetting Form에서  Rootpath 정보를 가져와서 ~
+            Web_URL.Text = HomeURL;
         }
 
         public void SettingClose(object sender, EventArgs e)
@@ -274,6 +214,48 @@ namespace USEAPI
         }
 
         #endregion
+
+        private void SearchSelectedText(string selectedText)
+        {
+            if (string.IsNullOrWhiteSpace(selectedText))
+            {
+                return;
+            }
+
+            Web_URL.Text = "https://search.naver.com/search.naver?ie=UTF-8&query=" + Uri.EscapeDataString(selectedText);
+            Web_URL_Btn_Click(this, EventArgs.Empty);
+        }
+
+        private void NavigateWebBrowser(WebBrowser browser, string address)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(address))
+                {
+                    MessageBox.Show("이동할 주소를 입력하세요.", "주소 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                Uri uri;
+                if (File.Exists(address))
+                {
+                    uri = new Uri(Path.GetFullPath(address));
+                }
+                else if (!Uri.TryCreate(address, UriKind.Absolute, out uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeFile))
+                {
+                    MessageBox.Show("http, https 또는 파일 경로만 열 수 있습니다.", "주소 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                browser.Navigate(uri);
+            }
+            catch (Exception ex)
+            {
+                ErrorLog.Write(ex);
+                MessageBox.Show(ex.Message, "이동 오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 }
 
